@@ -114,29 +114,44 @@
 
 \section{benchmarking methodology}
 
-\lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-\blindtext % Dummy text
+% \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
+\begin{itemize}
+  \item use built in golang benchmark framework
+  \item run command ....
+  \item output to txt
+  \item run python script to plot graphs
+  \item barchart of time taken against threads used
+  \item runs benchmarks on all pgm images
+  \item repeats benchmarks until results fall within a certain standard deviation (TBC)
+\end{itemize}
 %------------------------------------------------
 
 \section{parralelizing the program}
 
-\lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-\blindtext % Dummy text
-
+% \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
+\begin{itemize}
+  \item show workers pseudocode
+  \item show handler pseudocode
+  \item flowchart/ diagram of how channel communication workers
+  \item simple flowchart of how the whole program works currently
+\end{itemize}
 %------------------------------------------------
 
 \section{parralelizing benchmark and critical analysis}
 
-\lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-\blindtext % Dummy text
-
+% \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
+\begin{itemize}
+  \item show graph for 5120x5120.gpm for single implementation vs parralel implementation
+  \item describe the differences between each graph
+  \item explain the differences by referencing the flowchart/ how the code worker
+  \item explain the shape of the graph (why it resembles a 1/x graph). e.g. bottlenecks in channel communication...
+\end{itemize}
 %------------------------------------------------
 
 \section{memory sharing}
 
-\lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-\blindtext % Dummy text
-
+% \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
+THIS SECTION WILL BE USED IF WE DECIDE TO IMPLEMENT MEMORY SHARING OVER CHANNEL COMMUNICATION
 %------------------------------------------------
 
 \section{benchmarking and critical analysis of the memory sharing}
@@ -148,23 +163,24 @@
 
 \section{Implementing Halo Exchange}
 
-\lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-\blindtext % Dummy text
-
+% \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
+TO BE IMPLEMENTED
 %------------------------------------------------
 
 \section{benchmarking and critical analysis of the Halo Exchange}
 
 \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-\blindtext % Dummy text
-
+TO BE IMPLEMENTED
 %------------------------------------------------
 
 \section{benchmarking and critical analysis of enabling SDL}
 
-\lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-\blindtext % Dummy text
-
+% \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
+\begin{itemize}
+  \item show graphs and describe shape and differences of with vs without SDL
+  \item explain how SDL works
+  \item explain how this causes bottlenecks
+\end{itemize}
 %------------------------------------------------
 
 \section{comparing the parralel benchmarks}
