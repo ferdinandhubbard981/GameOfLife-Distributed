@@ -53,7 +53,7 @@
 \pagestyle{fancy} % All pages have headers and footers
 \fancyhead{} % Blank out the default header
 \fancyfoot{} % Blank out the default footer
-\fancyhead[C]{Running title $\bullet$ May 2016 $\bullet$ Vol. XXI, No. 1} % Custom header text
+\fancyhead[C]{Game of Life  $\bullet$ Computer Systems A $\bullet$ December 2022} % Custom header text
 \fancyfoot[RO,LE]{\thepage} % Custom footer text
 
 \usepackage{titling} % Customizing the title section
@@ -61,6 +61,10 @@
 \usepackage{hyperref} % For hyperlinks in the PDF
 \usepackage{graphicx}
 \graphicspath{{./img/}}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{txfonts}
+
 %----------------------------------------------------------------------------------------
 %	TITLE SECTION
 %----------------------------------------------------------------------------------------
@@ -121,7 +125,8 @@ account the wrap-around feature of Game of Life.
 Our means of evaluating parallelisation performance gains 
 was via the Go testing framework. Using 512px x 512px PGM images, we 
 repeated each benchmark 10 times, taking the average runtime for each thread to acquire the central value, 
-and plotting them. Each feature implementation was benchmarked in the same fashion.
+and plotting them. Each feature implementation was benchmarked in the same fashion, using Linux lab machines 
+with CPUs being Intel i7-8700 (6 core, 12 threads).
 % \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
 % \begin{itemize}
 %   \item use built in golang benchmark framework
@@ -133,13 +138,15 @@ and plotting them. Each feature implementation was benchmarked in the same fashi
 %   \item repeats benchmarks until results fall within a certain standard deviation (TBC)
 % \end{itemize}
 %------------------------------------------------
+\renewcommand\thesubsection{\Alph{subsection}}
 \begin{figure}
   \includegraphics[width=\linewidth]{modulo.png}
   \caption{Modulo Implementation}
   \label{fig:chart1}
 \end{figure}
 
-\section{parallelising the program}
+\section{A split personality program}
+\subsection{Parallelisation logic}
 The baseline implementation's distributor function starts with
 reading the image into 2D slice via \textit{io} commands, before evenly dividing 
 the workload between workers. With the aid of go-routines, workers have access to the old slice
@@ -148,6 +155,35 @@ laws onto the world, piping results into a blank slice of size: \[( endRow - sta
 Sending the results back to the distributor, we integrate back together the new slices, move the pointer to the old world
 to this newly-merged world and send the appropriate signals on the \textit{events}, \textit{io} channels.
 
+%------------------------------------------------
+
+\subsection{On the topic of analysis 1}
+
+From Fig. 1, we can conclude that multithreading have an overall improvement on performance. 
+There is a correlation between increasing number of threads and decreasing execution times, likely due 
+to some functions, such as \texttt{getNeighbourCount}, being "embarrassingly parallelisable". We 
+favour the term "delightfully parallel". As we have more cores for processing, the time taken for each turn is 
+reduced, hence the curve. 
+
+We do take notice of the obvious trend of diminishing returns - 
+the gradient of the time-thread curve flattens. We attribute this to unparallelisable core tasks such as IO 
+- the major slowdown that is reading and writing to/from the disk, and submit that using more threads than 
+a CPU physically has causes overhead in scheduling, minimising the benefits of allocating extra threads for processing.
+We suspect also that, contributing to this, the workload division does not change as much the more threads there are,
+which explains the reciprocal graph shape curve.
+
+Regarding the numerical results, we find greatest performance was with 16 threads (despite the diminishing returns)
+with a 67.6\% decrease in processing time. As for the worst change in performance thread-to-thread, 
+we see the 14th - 15th threads having the smallest difference in performance change (0.353\%), but acknowledge the
+potential anomalous data point.
+
+\section{How to count?}
+\subsection{Counting methods}
+It is well documented that division and other non-atomic arithmetic operations are slow. Thus, we submit our alternative
+implementations for \texttt{getNeighbourCount}. Fig. 1, our original implementation, uses the modulo operation (\%), 
+whereas Fig. 2, Fig. 3, use Branching (if-statements) and Bitmasking respectively. From this data, we see
+that Bitmasking is the fastest on average, but we can identify positive notes from all three.
+\subsection{On the topic of Analysis 2}
 \begin{figure}
   \includegraphics[width=\linewidth]{branching.png}
   \caption{Branching Implementation}
@@ -158,44 +194,110 @@ to this newly-merged world and send the appropriate signals on the \textit{event
   \caption{Bitmask Implementation}
   \label{fig:chart3}
 \end{figure}
-% \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-\begin{itemize}
-  \item show workers pseudocode
-  \item show handler pseudocode
-  \item flowchart/ diagram of how channel communication workers
-  \item simple flowchart of how the whole program works currently
-\end{itemize}
-%------------------------------------------------
 
-\section{On the topic of analysis}
-
-From Fig. 1, we can conclude that multithreading have an overall improvement on performance.
 Statistically-speaking, we find the solution using 
 modulo operations is most affected by thread usage, having standard deviation 413ms, as opposed to 107ms 
 and 73ms for branching and bitmasking respectively. Interested persons will find our results achieved by:
-\[SD(\forall x \in runtime : max(runtime) - x)\]
-This, however, implies not that higher threads means greater 
-performance as there exists other, non-parallelisable tasks, such as reading 
-PGM images set a base level of execution time. 
-% \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-\begin{itemize}
-  \item show graph for 5120x5120.gpm for single implementation vs parralel implementation
-  \item describe the differences between each graph
-  \item explain the differences by referencing the flowchart/ how the code worker
-  \item explain the shape of the graph (why it resembles a 1/x graph). e.g. bottlenecks in channel communication...
-\end{itemize}
+\[SD(\forall x \in runtimes : max(runtimes) - x)\]
+As discussed before, this, however, implies not that higher threads means greater 
+performance as there exists other, non-parallelisable tasks setting a base level of execution time. 
+The low standard deviation of the bitmasked implementation alludes to this portion of the program being as 
+near optimised as we possibly can. 
+
+When it comes to average times for threads, bitmasking takes the lead with
+890ms, followed by 1026ms and 1989ms for branching and modular respectively. This does identify branching for the 
+greatest decrease in runtime, with a 74.2\% decrease, as opposed to 32.1\%.
+
+\subsection{Our Algorithms}
+
+Code-wise, our initial implementation for \texttt{getNeighbourCount} used modulo operators unnecessarily. It did the following:
+\begin{enumerate}[noitemsep]
+  \item Set row = coordinate row \% ImageHeight
+  \item Set col = coordinate col \% ImageWidth
+  \item If row | col < 0, then add ImageHeight/Width respectively
+  \item If world[row][col] was 255, increment alive count
+\end{enumerate}
+
+With this, while it succeeds in its purpose, it does not
+succeed efficiently. Areas of improvement include removal of the modulo operator, which, here,
+does not serve any real purpose. This leads to our second implementation - branching:
+
+\begin{algorithm}
+  \caption{Branching getNeighbourCount}
+  \begin{algorithmic}
+    \State Let $i, j \gets (row, column)$ on world
+  \State Let $O \gets [\{-1,0,1\} \times \{-1, 0, 1\} - \{0,0\}]$
+  \State Let $alive \gets 0$   
+  \For{$(x,y) \in O$}
+      \State $row \gets (i + y)$
+      \If{row < 0}
+        \State $row \gets ImageHeight-1$
+      \ElsIf{row = ImageHeight}
+        \State $row \gets 0$
+      \EndIf
+      \State $col \gets (j + x)$
+      \If{col < 0}
+        \State $col \gets ImageWidth - 1$
+        \ElsIf{col = ImageWidth}
+          \State $col \gets 0$
+      \EndIf
+      \If{world[row][col] = 255}
+      \State $alive++$
+      \EndIf
+    \EndFor
+    \State \Return $alive$
+  \end{algorithmic}
+\end{algorithm}
+Although the line count has certainly increased, the performance has drastically improved. Citing the 
+74.2\% decrease, this does appear to be "good enough" as an implementation. An improvement may be to rid 
+ourselves of branches, as this involves branch prediction which itself is intensive, due to how the CPU 
+does not know which path will be taken ahead of time. If we use only logical operations,
+we get the Bitmasking implementation:
+\begin{algorithm}
+  \caption{Bitmasked getNeighbourCount}
+  \begin{algorithmic}
+    \State Let $i, j \gets (row, column)$ on world
+  \State Let $O \gets [\{-1,0,1\} \times \{-1, 0, 1\} - \{0,0\}]$
+  \State Let $alive \gets 0$   
+  \For{$(x,y) \in O$}
+      \State $row \gets (i + y) \& (ImageHeight - 1)$
+      \State $col \gets (j + x) \& (ImageWidth - 1)$
+      \State $alive \gets alive + world[row][col] >> 7$
+    \EndFor
+    \State \Return alive
+  \end{algorithmic}
+\end{algorithm}
+
+This algorithm is our fastest implementation. Minimising both line count and runtime, it 
+counts the neighbours using purely bitwise operators and assignments - no branching needed.
+
 %------------------------------------------------
 
 \section{memory sharing}
-
-% \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-THIS SECTION WILL BE USED IF WE DECIDE TO IMPLEMENT MEMORY SHARING OVER CHANNEL COMMUNICATION
-%------------------------------------------------
-
-\section{benchmarking and critical analysis of the memory sharing}
+\subsection{Motivation}
+Looking at our achievements in counting, we noticed overhead associated with channel communication.
+Exploring \href{https://github.com/golang/go/blob/4fc9565ffce91c4299903f7c17a275f0786734a1/src/runtime/chan.go}
+{Go's implementation for channels}, we see much overhead. Since we know a channel is a thread-safe memory sharing
+mechanism, we can rid the overhead, using only mutex locks and condition variables.
+\subsection{Implementation}
+Our homemade channel implementation does the following:
+\begin{enumerate}[noitemsep]
+  \item Acquire the mutex lock
+  \item While \texttt{condition} is false, await broadcast unless non-blocking send
+  \item Use the value, then broadcast to other processes
+  \item Finally, unlock mutex
+\end{enumerate}
+We introduce 2 methods, \texttt{Send} \& \texttt{Receive}. \texttt{Send} waits for the memory space 
+to be empty, and replaces it with a value. \texttt{Receive} waits for the memory space to point to a value, and then 
+replaces it with \texttt{nil}. \texttt{Go 1.12} does not have generics, which vastly complicated implementation. 
+Benchmarks with memory sharing (and bitmasked \texttt{getNeighbourCount}) is shown in Fig. 4.
+\subsection{On the topic of Analysis 3}
+benchmarks go here, analysis here
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit.
 \blindtext % Dummy text
+
+
 
 %------------------------------------------------
 
