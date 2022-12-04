@@ -30,7 +30,7 @@
 
 \usepackage[english]{babel} % Language hyphenation and typographical rules
 
-\usepackage[hmarginratio=5:5,top=32mm,columnsep=20pt]{geometry} % Document margins
+\usepackage[hmarginratio=1:1,top=32mm,columnsep=20pt,a4paper,total={6in,9in}]{geometry} % Document margins
 \usepackage[hang, small,labelfont=bf,up,textfont=it,up]{caption} % Custom captions under/above floats in tables or figures
 \usepackage{booktabs} % Horizontal rules in tables
 
@@ -59,7 +59,8 @@
 \usepackage{titling} % Customizing the title section
 
 \usepackage{hyperref} % For hyperlinks in the PDF
-
+\usepackage{graphicx}
+\graphicspath{{./img/}}
 %----------------------------------------------------------------------------------------
 %	TITLE SECTION
 %----------------------------------------------------------------------------------------
@@ -96,37 +97,67 @@
 %----------------------------------------------------------------------------------------
 %	ARTICLE CONTENTS
 %----------------------------------------------------------------------------------------
-\section{Introduction to the parallelised solution}
+\section{Introduction to the parallel solution}
 
-As an initial attempt, we began by implementing a single-threaded Game of Life (GoL) Engine, expanding upon this work with parallelisation by virtue of concurrent go-routine workers. Recognising that branch instructions throttled efficiency of \texttt{getNeighbourCount}, we removed if-statements, introduced bit-masking and assignment which drastically improving runtime. 
+As an initial attempt, we began by implementing a 
+single-threaded Game of Life (GoL) Engine, expanding upon this work 
+with parallelisation by virtue of concurrent go-routine workers. 
+Recognising that there exists various methods to calculating the perimeter
+for \texttt{getNeighbourCount}, we tried various counting methods - taking into 
+account the wrap-around feature of Game of Life.
 
-\begin{itemize}
-  \item single threaded implementation
-  \item events passing (alive cells, turn completed)
-  \item PGM image output implementation
-  \item SDL implementation (flipped cells events)
-  \item using channels and goroutines to create multiple workers (parallelising the solution)
-  \item switching to a memory sharing solution instead of using channels (TODO?)
-  \item implementing halo exchange
-\end{itemize}
+% \begin{itemize}
+%   \item single threaded implementation
+%   \item events passing (alive cells, turn completed)
+%   \item PGM image output implementation
+%   \item SDL implementation (flipped cells events)
+%   \item using channels and goroutines to create multiple workers (parallelising the solution)
+%   \item switching to a memory sharing solution instead of using channels (TODO?)
+%   \item implementing halo exchange
+% \end{itemize}
 %------------------------------------------------
 
 \section{benchmarking methodology}
-
+Our means of evaluating parallelisation performance gains 
+was via the Go testing framework. Using 512px x 512px PGM images, we 
+repeated each benchmark 10 times, taking the average runtime for each thread to acquire the central value, 
+and plotting them. Each feature implementation was benchmarked in the same fashion.
 % \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-\begin{itemize}
-  \item use built in golang benchmark framework
-  \item run command ....
-  \item output to txt
-  \item run python script to plot graphs
-  \item barchart of time taken against threads used
-  \item runs benchmarks on all pgm images
-  \item repeats benchmarks until results fall within a certain standard deviation (TBC)
-\end{itemize}
+% \begin{itemize}
+%   \item use built in golang benchmark framework
+%   \item run command ....
+%   \item output to txt
+%   \item run python script to plot graphs
+%   \item barchart of time taken against threads used
+%   \item runs benchmarks on all pgm images
+%   \item repeats benchmarks until results fall within a certain standard deviation (TBC)
+% \end{itemize}
 %------------------------------------------------
+\begin{figure}
+  \includegraphics[width=\linewidth]{modulo.png}
+  \caption{Modulo Implementation}
+  \label{fig:chart1}
+\end{figure}
 
-\section{parralelising the program}
+\section{parallelising the program}
+The baseline implementation's distributor function starts with
+reading the image into 2D slice via \textit{io} commands, before evenly dividing 
+the workload between workers. With the aid of go-routines, workers have access to the old slice
+as well as the boundaries in which to process. By using \texttt{getNeighbourCount}, we apply the Game of Life
+laws onto the world, piping results into a blank slice of size: \[( endRow - startRow ) \times ImageWidth\]
+Sending the results back to the distributor, we integrate back together the new slices, move the pointer to the old world
+to this newly-merged world and send the appropriate signals on the \textit{events}, \textit{io} channels.
 
+\begin{figure}
+  \includegraphics[width=\linewidth]{branching.png}
+  \caption{Branching Implementation}
+  \label{fig:chart2}
+\end{figure}
+\begin{figure}
+  \includegraphics[width=\linewidth]{bitmask.png}
+  \caption{Bitmask Implementation}
+  \label{fig:chart3}
+\end{figure}
 % \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
 \begin{itemize}
   \item show workers pseudocode
@@ -136,8 +167,16 @@ As an initial attempt, we began by implementing a single-threaded Game of Life (
 \end{itemize}
 %------------------------------------------------
 
-\section{parallelising benchmark and critical analysis}
+\section{On the topic of analysis}
 
+From Fig. 1, we can conclude that multithreading have an overall improvement on performance.
+Statistically-speaking, we find the solution using 
+modulo operations is most affected by thread usage, having standard deviation 413ms, as opposed to 107ms 
+and 73ms for branching and bitmasking respectively. Interested persons will find our results achieved by:
+\[SD(\forall x \in runtime : max(runtime) - x)\]
+This, however, implies not that higher threads means greater 
+performance as there exists other, non-parallelisable tasks, such as reading 
+PGM images set a base level of execution time. 
 % \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
 \begin{itemize}
   \item show graph for 5120x5120.gpm for single implementation vs parralel implementation
