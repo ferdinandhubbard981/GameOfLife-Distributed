@@ -108,7 +108,7 @@ single-threaded Game of Life (GoL) Engine, expanding upon this work
 with parallelisation by virtue of concurrent go-routine workers. 
 Recognising that there exists various methods to calculating the perimeter
 for \texttt{getNeighbourCount}, we tried various counting methods - taking into 
-account the wrap-around feature of Game of Life.
+account the modularity of Game of Life - as well as finding channel alternatives.
 
 % \begin{itemize}
 %   \item single threaded implementation
@@ -304,9 +304,24 @@ We add that repeated trials yielded similar style results. Our method used the f
 Where $MEM$ is memory sharing implementation time, $ORIG$ is channel impl. time, $T$ is the number of threads. 
 
 \section{Distributed Implementation}
-
+Similar to how we did the parallel side, we started the distributed section by using a single worker, this time
+with the worker being a separate process and communicated to via Remote Procedure Calls (RPC henceforth). This expanded to
+doing using multiple workers, implementing fault tolerance and finally halo exchange.
 
 %------------------------------------------------
+\section{A lonesome worker}
+\subsection{Logic}
+Our single-worker distributed implementation moved much of the processing to said worker. From the distributor, we sent a 
+single RPC call to the worker, processed GoL turns on the worker, then sent the final state back. Results are shown in Fig. 5.
+\begin{figure}
+  \includegraphics[width=\linewidth]{para-v-dist.png}
+  \caption{1 worker vs. 1 thread}
+  \label{fig:chart5}
+\end{figure}
+\subsection{On the topic of Analysis 4}
+The differences between the benchmark times is not significant when compared to multi-threaded work. We 
+identified an average of 4.54\% time decrease, which is most likely attributed to how the single-threaded workload had 
+go-routines for Alive Cells and Key presses, whereas the single worker was Step 1 of Distributed, being "barebones".
 
 \section{Implementing Halo Exchange}
 
