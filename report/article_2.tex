@@ -287,16 +287,23 @@ Our homemade channel implementation does the following:
   \item Use the value, then broadcast to other processes
   \item Finally, unlock mutex
 \end{enumerate}
+\begin{figure}
+  \includegraphics[width=\linewidth]{memshare.png}
+  \caption{Memory Sharing}
+  \label{fig:chart4}
+\end{figure}
 We introduce 2 methods, \texttt{Send} \& \texttt{Receive}. \texttt{Send} waits for the memory space 
 to be empty, and replaces it with a value. \texttt{Receive} waits for the memory space to point to a value, and then 
 replaces it with \texttt{nil}. \texttt{Go 1.12} does not have generics, which vastly complicated implementation. 
 Benchmarks with memory sharing (and bitmasked \texttt{getNeighbourCount}) is shown in Fig. 4.
 \subsection{On the topic of Analysis 3}
-benchmarks go here, analysis here
+This data was not very analysable. The lack of clear trend and sporadic data points suggests no real difference 
+in performance when adding memory sharing, or faulty implementation (which we realistically do consider a possibility).
+A trend, if any, we identify is that the Modulo performance suffered, but due to the lack of clarity, this is inconclusive.
+We add that repeated trials yielded similar style results. Our method used the following: \[\forall t \in T: ORIG[t] - MEM[t]\]
+Where $MEM$ is memory sharing implementation time, $ORIG$ is channel impl. time, $T$ is the number of threads. 
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-\blindtext % Dummy text
-
+\section{Distributed Implementation}
 
 
 %------------------------------------------------
@@ -314,7 +321,7 @@ TO BE IMPLEMENTED
 %------------------------------------------------
 
 \section{benchmarking and critical analysis of enabling SDL}
-
+% i dont think we need benchmarking of SDL
 % \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
 \begin{itemize}
   \item show graphs and describe shape and differences of with vs without SDL
