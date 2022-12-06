@@ -323,6 +323,64 @@ The differences between the benchmark times is not significant when compared to 
 identified an average of 4.54\% time decrease, which is most likely attributed to how the single-threaded workload had 
 go-routines for Alive Cells and Key presses, whereas the single worker was Step 1 of Distributed, being "barebones".
 
+\section{Friends? - Multi-worker GoL}
+\subsection{Implementing multiple workers}
+With the introduction of multiple workers, we needed to introduce a broker to interface the workers for the controller
+and vice versa. This did require moving turn iteration logic to the broker, requiring a major refactor. In the end, the system
+revolved around the broker with bidirectional RPC communication betweeen workers and the controller. We equally divide work
+between workers, and all processes keep an internal state of some sort. By massively simplifying, the broker does the following:
+
+\begin{enumerate}[noitemsep]
+  \item Listen for worker and controller connections
+  \item On connect, call the worker/controller back (bidirectional)
+  \item Listen for GoL process request from controller
+  \item Iterate, dividing and sending work to each worker.
+  \item After getting all parts back together, apply changes to broker internal state and divide new state up
+\end{enumerate}
+%--------------
+\begin{itemize}
+  \item ADD BENCHMARKS HERE
+\end{itemize}
+%--------------
+\subsection{Analysis 5}
+%--------------
+\begin{itemize}
+  \item ADD ANALYSIS HERE
+  \item explain trends, averages, maybe std dev?
+  \item if low std dev then time not affected too much by worker count
+\end{itemize}
+%--------------
+\section{Tolerating faults}
+\subsection{Managing workers}
+In our previous implementation, we never checked for worker disconnects. This leaves us in a vulnerable
+position - if a worker were to be terminated at any point, then we would have one section of changes missing.
+This would show itself with a static portion on the SDL window. There is also the case of adding more workers. Either
+way, it means we need to keep the order of workers. We present Algorithm 3 to solve this.
+\begin{algorithm}
+  \caption{Worker-diff checker}
+  \begin{algorithmic}
+    \State Require $ids \subseteq \mathbb{N}$
+    \State Require $oldIds \subseteq \mathbb{N}$ 
+    \State Let $idMap \gets Map$
+    \For{$id \in ids$}
+      \State $idMap[id] \gets addr$
+    \EndFor
+  \For{$id \in oldIds$}
+      \If{idMap[id] = nil}
+      \State \Return False
+      \EndIf
+    \EndFor
+    \State \Return True
+  \end{algorithmic}
+\end{algorithm}
+
+
+What this algorithm achieves is detection of disconnects and reconnects.
+Given that we have the loop invariant (in turn iterator) "no two workers will have the same worker id",
+we can use this algorithm, and if we detect a change, recalibrate the workers to adjust for new/missing worker. 
+One may ask, does a worker disconnect not throw errors when calling RPC methods? In this case, we utilise \texttt{client.Go},
+which notifies the calling process of errors without crashing. So, if error, then trigger recalibration.
+
 \section{Implementing Halo Exchange}
 
 % \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
@@ -333,16 +391,6 @@ TO BE IMPLEMENTED
 
 \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
 TO BE IMPLEMENTED
-%------------------------------------------------
-
-\section{benchmarking and critical analysis of enabling SDL}
-% i dont think we need benchmarking of SDL
-% \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-\begin{itemize}
-  \item show graphs and describe shape and differences of with vs without SDL
-  \item explain how SDL works
-  \item explain how this causes bottlenecks
-\end{itemize}
 %------------------------------------------------
 
 \section{comparing the parralel benchmarks}
