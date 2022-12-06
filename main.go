@@ -17,19 +17,19 @@ func main() {
 	flag.StringVar(
 		&params.ListenIP,
 		"listen",
-		"127.0.0.1",
+		"54.145.138.74",
 		"Specify the IP address of the distributor (this machine). Defaults to 127.0.0.1.")
 
 	flag.IntVar(
 		&params.ListenPort,
 		"p",
-		8090,
+		8030,
 		"Specify the port to listen on. Defaults to 8090.")
 
 	flag.StringVar(
 		&params.BrokerAddr,
 		"broker",
-		"127.0.0.1:9000",
+		"100.26.97.47:8030",
 		"Specify the socket address of the broker. Defaults to 127.0.0.1:9000.")
 
 	flag.IntVar(
@@ -58,7 +58,7 @@ func main() {
 
 	noVis := flag.Bool(
 		"noVis",
-		false,
+		true,
 		"Disables the SDL window, so there is no visualisation during the tests.")
 
 	flag.Parse()

@@ -11,7 +11,7 @@ func BenchmarkLocal(b *testing.B) {
 	turns := 100
 	threadConfs := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 	imageConfs := []int{16, 64, 128, 256, 512}
-
+	fmt.Println("hi")
 	for _, imageSize := range imageConfs {
 		for _, threads := range threadConfs {
 			p := gol.Params{
