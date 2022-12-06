@@ -45,9 +45,11 @@ func (w *Worker) EvolveSlice(req stubs.WorkRequest, res *stubs.NilResponse) (err
 		fmt.Printf("processing turn: %d of turns %d\n", i, req.Turns)
 		// send Halo to adjacent workers
 		if !req.IsSingleWorker {
-			w.pushHalos(topDone, botDone) //maybe check if they have been received before send next?
+			go w.pushHalos(topDone, botDone) //maybe check if they have been received before send next?
 		}
+		fmt.Printf("1\n")
 		var evolvedSlice [][]byte = createNewSlice(w.height, w.width) // TODO try move this outside of for loop and see if it still works
+		fmt.Printf("2\n")
 		// wait for Halo input
 		var topHalo []byte = nil
 		var botHalo []byte = nil
@@ -144,6 +146,19 @@ func (w *Worker) Shutdown(req stubs.NilRequest, res *stubs.NilResponse) (err err
 }
 
 func (w *Worker) PushHalo(req stubs.PushHaloRequest, res *stubs.NilResponse) (err error) {
+	for w.repriming {
+		if req.IsTop {
+			select {
+			case w.topHalo <- req.Halo:
+			default:
+			}
+		} else {
+			select {
+			case w.botHalo <- req.Halo:
+			default:
+			}
+		}
+	}
 	if req.IsTop {
 		w.topHalo <- req.Halo
 	} else {
