@@ -7,6 +7,7 @@ import (
 	"net/rpc"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -29,6 +30,8 @@ type Worker struct {
 	botHalo      chan []byte
 	exit         bool
 	inEvolveLoop bool
+	Pause        sync.WaitGroup
+	isPaused     bool
 }
 
 func (w *Worker) EvolveSlice(req stubs.WorkRequest, res *stubs.NilResponse) (err error) {
@@ -90,6 +93,7 @@ func (w *Worker) EvolveSlice(req stubs.WorkRequest, res *stubs.NilResponse) (err
 			Turn:         i,
 			WorkerId:     w.id,
 		}
+		w.Pause.Wait()
 		w.broker.Call(stubs.BrokerPushState, brokerReq, new(stubs.NilResponse))
 
 		fmt.Printf("E\n")
@@ -137,6 +141,17 @@ func (w *Worker) InitialiseWorker(req stubs.InitWorkerRequest, res *stubs.NilRes
 	return
 }
 
+func (w *Worker) PauseState(req stubs.NilRequest, res *stubs.PauseResponse) (err error) {
+	if w.isPaused {
+		w.Pause.Done()
+		w.isPaused = false
+	} else {
+		w.Pause.Add(1)
+		w.isPaused = true
+	}
+	return
+}
+
 // sent by broker to sleep the distributed system
 func (w *Worker) Shutdown(req stubs.NilRequest, res *stubs.NilResponse) (err error) {
 	// programmatic Ctrl-C
@@ -146,24 +161,30 @@ func (w *Worker) Shutdown(req stubs.NilRequest, res *stubs.NilResponse) (err err
 }
 
 func (w *Worker) PushHalo(req stubs.PushHaloRequest, res *stubs.NilResponse) (err error) {
-	for w.repriming {
-		if req.IsTop {
-			select {
-			case w.topHalo <- req.Halo:
-			default:
-			}
-		} else {
-			select {
-			case w.botHalo <- req.Halo:
-			default:
-			}
-		}
-	}
+	// loop := true
+	fmt.Println("x")
+	// for !w.repriming && loop {
+	// 	if req.IsTop {
+	// 		select {
+	// 		case w.topHalo <- req.Halo:
+	// 			loop = false
+	// 		default:
+	// 		}
+	// 	} else {
+	// 		select {
+	// 		case w.botHalo <- req.Halo:
+	// 			loop = false
+	// 		default:
+	// 		}
+	// 	}
+	// }
+	w.Pause.Wait()
 	if req.IsTop {
 		w.topHalo <- req.Halo
 	} else {
 		w.botHalo <- req.Halo
 	}
+
 	return
 }
 
@@ -178,6 +199,8 @@ func main() {
 		topHalo:      make(chan []byte),
 		botHalo:      make(chan []byte),
 		inEvolveLoop: false,
+		Pause:        sync.WaitGroup{},
+		isPaused:     false,
 	}
 	// listen for work
 	listener, err := net.Listen("tcp", ":"+*pAddr)

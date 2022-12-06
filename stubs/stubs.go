@@ -38,6 +38,7 @@ var ControllerQuit = "Broker.ControllerQuit"
 
 // we use this to indicate the controller wants to pause processing
 var PauseState = "Broker.PauseState"
+var WorkerPauseState = "Worker.PauseState"
 
 // req NilRequest, 		sends PauseResponse   x
 // - server must send the turn currently being processed

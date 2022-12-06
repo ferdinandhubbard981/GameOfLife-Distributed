@@ -117,6 +117,7 @@ func (b *Broker) StartGOL(req stubs.StartGOLRequest, res *stubs.NilResponse) (er
 					b.errorChan <- id
 				}
 			}
+			b.Pause.Wait()
 		}
 
 	}
@@ -144,7 +145,7 @@ func (b *Broker) ControllerQuit(req stubs.NilRequest, res *stubs.NilResponse) (e
 }
 
 // pauses the game of life loop
-func (b *Broker) PauseState(req stubs.NilRequest, res *stubs.PauseResponse) (err error) {
+func (b *Broker) PauseState(req stubs.NilRequest, res *stubs.NilRequest) (err error) {
 	if b.isPaused {
 		b.Pause.Done()
 		b.isPaused = false
@@ -152,11 +153,16 @@ func (b *Broker) PauseState(req stubs.NilRequest, res *stubs.PauseResponse) (err
 		b.Pause.Add(1)
 		b.isPaused = true
 	}
+
+	for id := range b.workerIds {
+		b.Workers[id].client.Call(stubs.WorkerPauseState, new(stubs.NilRequest), new(stubs.NilResponse))
+	}
 	return
 }
 
 func (b *Broker) PushState(req stubs.BrokerPushStateRequest, res *stubs.NilResponse) (err error) {
 	fmt.Printf("PushState\n")
+	b.Pause.Wait()
 	if b.exit || b.Controller == nil {
 		return
 	}
