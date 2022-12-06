@@ -319,16 +319,10 @@ single RPC call to the worker, processed GoL turns on the worker, then sent the 
   \label{fig:chart5}
 \end{figure}
 \subsection{On the topic of Analysis 4}
-The absurd differences we observed in the 1 worker vs. 1 thread (distributed versus parallel), is due 
-to a number of things:
-\begin{enumerate}
-  \item Broker and Workers were positioned in US-east-1, meaning North Virginia, which is 7000km away.
-  This oversight caused the massive difference in results.
-  \item RPC calls for 1 worker may have caused overhead (extremely minor compared to above)
-  \item Controller was not positioned in US-east-1, as we were not able to successfully run the controller
-  program on the EC2 instance, due to issues with SDL.
-\end{enumerate}
-Due to this, the results are statistically worthless.
+We decided to test single threaded parallel version against a single worker distributed GoL. Seeing that the 1 worker ran with
+runtime 1362ms versus the single-threaded 1208ms, we concluded that the 154ms difference was due to the latency between Bristol
+and AWS London, in addition to some potentially contributing overhead from RPC calls. The rest of the runtime we concluded was the natural
+runtime of the worker processing Game of Life. 
 
 \section{Friends? - Multi-worker GoL}
 \subsection{Implementing multiple workers}
@@ -344,21 +338,28 @@ between workers, and all processes keep an internal state of some sort. By massi
   \item Iterate, dividing and sending work to each worker.
   \item After getting all parts back together, apply changes to broker internal state and divide new state up
 \end{enumerate}
+In order to call the worker back, this meant that the worker needed to provide its own IP address - the same 
+process happens for the controller. The reason why the worker needs bidirectional communication is that later on with halo-exchange,
+we will need this to push the state when the turn iterator is at the worker, and also to allow workers to disconnect 
+without errors.
+
+When it comes to the reassembly, the worker sends the flipped cells to the broker, and because no 
+worker interferes with another worker's section, we can just apply the changes in any order to the broker's
+internal state.
 %--------------
-% \begin{figure}
-%   \includegraphics[width=\linewidth]{multiworker.png}
-%   \caption{Multi-worker performance}
-%   \label{fig:chart6}
-% \end{figure}
+\begin{figure}
+  \includegraphics[width=\linewidth]{multi-worker.png}
+  \caption{Multi-worker local performance}
+  \label{fig:chart6}
+\end{figure}
 %--------------
 \subsection{Analysis 5}
 %--------------
-\begin{itemize}
-  \item ADD ANALYSIS HERE
-  \item explain trends, averages, maybe std dev?
-  \item if low std dev then time not affected too much by worker count
-\end{itemize}
-%--------------
+Shown in Fig. 6 is the distributed system when run on a local machine (due to port-forwarding issues).
+We can see a general negative correlation between workers and runtime - as workers increases, the runtime decreases.
+Noticing that the runtime begins to incline at the end, we initially thought this was due to RPC overhead, but it may have been
+due to how running on 1 machine starts to cost more performance than it improves.
+
 \section{Tolerating faults}
 In our previous implementation, we never checked for worker disconnects. This leaves us in a vulnerable
 position - if a worker were to be terminated at any point, then we would have one section of changes missing.
@@ -390,6 +391,15 @@ One may ask, does a worker disconnect not throw errors when calling RPC methods?
 which notifies the calling process of errors without crashing. So, if error, then trigger recalibration by resetting each worker's
 internal state.
 
+More specifically, the broker sends an RPC call to each remaining worker with a fresh state from which to 
+evolve from. The previous internal state of each worker is discarded, even if it is one turn ahead as we use the broker's
+internal state, which is only pushed to if all workers return their flipped cells fine.
+\begin{figure}
+  \includegraphics[width=\linewidth]{halo.png}
+  \caption{Multi-worker AWS performance}
+  \label{fig:chart7}
+\end{figure}
+
 \section{Implementing Halo Exchange}
 \subsection{How Jesus Christ came to be}
 Our first attempt wasn't exactly the definition of halo exchange. It used halos distributed by broker to
@@ -406,42 +416,21 @@ We present our results with Fig. 6.
 
 
 \subsection{Analysis 6 - Judgement Day}
-An obvious pattern we see is that the time taken is significantly reduced. We find that there is a negative
-correlation between workers and time - increasing workers decreases the runtime of the program. We argue that
-these results stems from the reduced overhead of needing to use the broker to transfer halos; decreased workload
-from the broker having to manage turns actually becoming a broker seen typically in Publish-Subscriber models.
+The absurd difference in value between Fig. 6, Fig. 7, was due to what we identified as transmission latency. The broker
+was positioned in \texttt{us-east-1}, North Virginia, and the 7000km+ differential caused the latency 
+to be very high.
+We did notice, despite the glaringly obvious latency issue, that the time did start to decline as more workers
+were added, implying that there may have been some speed increases due to our distributed system. However,
+we do not reject the notion of these being oscillations in latency values.
 
+Giving the benefit of the doubt, had the EC2 instances been set up in the correct region, then we should have noticed
+a significantly smaller runtime with a lower standard deviation - that is, less variance in data points.
 %------------------------------------------------
-
-\section{comparing the parralel benchmarks}
-
-
-
-%------------------------------------------------
-
-\section{Results}
-
-\begin{table}
-\caption{Example table}
-\centering
-\begin{tabular}{llr}
-\toprule
-\multicolumn{2}{c}{Name} \\
-\cmidrule(r){1-2}
-First name & Last Name & Grade \\
-\midrule
-John & Doe & $7.5$ \\
-Richard & Miles & $2$ \\
-\bottomrule
-\end{tabular}
-\end{table}
 
 
 %------------------------------------------------
 
-\section{Discussion}
-
-\subsection{Areas for improvement}
+\section{Areas for improvement}
 
 \begin{itemize}
   \item Memory sharing implementation for channels - we were able to create an alternative to channels, but
@@ -449,6 +438,12 @@ Richard & Miles & $2$ \\
   would be to rewrite this, and substitute all the other channels used with our implementation
   \item Parallelising workers - we did not manage to implement this in time. Since all the code for multithreading
   was in our parallel code, we could have imported the code then implemented it inside our workers.
+  \item Controller on AWS node - we found issues with latency when using AWS nodes, so if the "local" controller was
+  localised in the AWS data center, then we would eliminate this issue. We, however, ran into issues with SDL not working
+  on EC2 machines and port-forward which meant these latency issues still happened.
+  \item Broker fault tolerance - As a extreme extension, we have the broker as our single point of failure. If the broker fails, then
+  nothing can connect and no processes can occur. We could, in theory, create a second broker to be redundant in case the instance 
+  running the initial broker fails.
 \end{itemize}
 \subsection{Thanks}
 \begin{itemize}
