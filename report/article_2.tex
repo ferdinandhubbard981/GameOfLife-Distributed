@@ -157,7 +157,7 @@ to this newly-merged world and send the appropriate signals on the \textit{event
 
 %------------------------------------------------
 
-\subsection{On the topic of analysis 1}
+\subsection{On the topic of Analysis 1}
 
 From Fig. 1, we can conclude that multithreading have an overall improvement on performance. 
 There is a correlation between increasing number of threads and decreasing execution times, likely due 
@@ -314,14 +314,21 @@ doing using multiple workers, implementing fault tolerance and finally halo exch
 Our single-worker distributed implementation moved much of the processing to said worker. From the distributor, we sent a 
 single RPC call to the worker, processed GoL turns on the worker, then sent the final state back. Results are shown in Fig. 5.
 \begin{figure}
-  \includegraphics[width=\linewidth]{para-v-dist.png}
+  \includegraphics[width=\linewidth]{1v1.png}
   \caption{1 worker vs. 1 thread}
   \label{fig:chart5}
 \end{figure}
 \subsection{On the topic of Analysis 4}
-The differences between the benchmark times is not significant when compared to multi-threaded work. We 
-identified an average of 4.54\% time decrease, which is most likely attributed to how the single-threaded workload had 
-go-routines for Alive Cells and Key presses, whereas the single worker was Step 1 of Distributed, being "barebones".
+The absurd differences we observed in the 1 worker vs. 1 thread (distributed versus parallel), is due 
+to a number of things:
+\begin{enumerate}
+  \item Broker and Workers were positioned in US-east-1, meaning North Virginia, which is 7000km away.
+  This oversight caused the massive difference in results.
+  \item RPC calls for 1 worker may have caused overhead (extremely minor compared to above)
+  \item Controller was not positioned in US-east-1, as we were not able to successfully run the controller
+  program on the EC2 instance, due to issues with SDL.
+\end{enumerate}
+Due to this, the results are statistically worthless.
 
 \section{Friends? - Multi-worker GoL}
 \subsection{Implementing multiple workers}
@@ -338,9 +345,11 @@ between workers, and all processes keep an internal state of some sort. By massi
   \item After getting all parts back together, apply changes to broker internal state and divide new state up
 \end{enumerate}
 %--------------
-\begin{itemize}
-  \item ADD BENCHMARKS HERE
-\end{itemize}
+% \begin{figure}
+%   \includegraphics[width=\linewidth]{multiworker.png}
+%   \caption{Multi-worker performance}
+%   \label{fig:chart6}
+% \end{figure}
 %--------------
 \subsection{Analysis 5}
 %--------------
@@ -351,7 +360,6 @@ between workers, and all processes keep an internal state of some sort. By massi
 \end{itemize}
 %--------------
 \section{Tolerating faults}
-\subsection{Managing workers}
 In our previous implementation, we never checked for worker disconnects. This leaves us in a vulnerable
 position - if a worker were to be terminated at any point, then we would have one section of changes missing.
 This would show itself with a static portion on the SDL window. There is also the case of adding more workers. Either
@@ -377,37 +385,37 @@ way, it means we need to keep the order of workers. We present Algorithm 3 to so
 
 What this algorithm achieves is detection of disconnects and reconnects.
 Given that we have the loop invariant (in turn iterator) "no two workers will have the same worker id",
-we can use this algorithm, and if we detect a change, recalibrate the workers to adjust for new/missing worker. 
+we can use this algorithm. If we detect a change, recalibrate the workers to adjust for new/missing worker. 
 One may ask, does a worker disconnect not throw errors when calling RPC methods? In this case, we utilise \texttt{client.Go},
-which notifies the calling process of errors without crashing. So, if error, then trigger recalibration.
+which notifies the calling process of errors without crashing. So, if error, then trigger recalibration by resetting each worker's
+internal state.
 
 \section{Implementing Halo Exchange}
+\subsection{How Jesus Christ came to be}
+Our first attempt wasn't exactly the definition of halo exchange. It used halos distributed by broker to
+each worker, who then used the halos to update their internal state. Now, our implementation transfers the turn iterator
+logic to the workers. The sequence of events happens as follows:
+\begin{enumerate}[noitemsep]
+  \item Worker connects to broker, and is initialised with parameters of controller.
+  \item On initialisation, worker will dial the top and bottom neighbours (if any), then await work.
+  \item On work, send its halos, and evolve its own slice given the neighbouring halos
+  \item Results are pushed to broker and loop
+\end{enumerate}
+This oversimplified view of halo exchange is represented by a significant amount of implementation code.
+We present our results with Fig. 6.
 
-% \lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-TO BE IMPLEMENTED
-%------------------------------------------------
 
-\section{benchmarking and critical analysis of the Halo Exchange}
+\subsection{Analysis 6 - Judgement Day}
+An obvious pattern we see is that the time taken is significantly reduced. We find that there is a negative
+correlation between workers and time - increasing workers decreases the runtime of the program. We argue that
+these results stems from the reduced overhead of needing to use the broker to transfer halos; decreased workload
+from the broker having to manage turns actually becoming a broker seen typically in Publish-Subscriber models.
 
-\lettrine[nindent=0em,lines=3]{L} orem ipsum dolor sit amet, consectetur adipiscing elit.
-TO BE IMPLEMENTED
 %------------------------------------------------
 
 \section{comparing the parralel benchmarks}
 
-Maecenas sed ultricies felis. Sed imperdiet dictum arcu a egestas. 
-\begin{itemize}
-\item Donec dolor arcu, rutrum id molestie in, viverra sed diam
-\item Curabitur feugiat
-\item turpis sed auctor facilisis
-\item arcu eros accumsan lorem, at posuere mi diam sit amet tortor
-\item Fusce fermentum, mi sit amet euismod rutrum
-\item sem lorem molestie diam, iaculis aliquet sapien tortor non nisi
-\item Pellentesque bibendum pretium aliquet
-\end{itemize}
-\blindtext % Dummy text
 
-Text requiring further explanation\footnote{Example footnote}.
 
 %------------------------------------------------
 
@@ -428,14 +436,6 @@ Richard & Miles & $2$ \\
 \end{tabular}
 \end{table}
 
-\blindtext % Dummy text
-
-\begin{equation}
-\label{eq:emc}
-e = mc^2
-\end{equation}
-
-\blindtext % Dummy text
 
 %------------------------------------------------
 
@@ -443,26 +443,24 @@ e = mc^2
 
 \subsection{Areas for improvement}
 
-A statement requiring citation \cite{Figueredo:2009dg}.
-\blindtext % Dummy text
-
+\begin{itemize}
+  \item Memory sharing implementation for channels - we were able to create an alternative to channels, but
+  this ended up more or less the same performance as a regular channel, if not worse. A strong area of improvement
+  would be to rewrite this, and substitute all the other channels used with our implementation
+  \item Parallelising workers - we did not manage to implement this in time. Since all the code for multithreading
+  was in our parallel code, we could have imported the code then implemented it inside our workers.
+\end{itemize}
 \subsection{Thanks}
-
-\blindtext % Dummy text
+\begin{itemize}
+  \item Lecturers and TAs for their support
+  \item Monster Energy\texttrademark
+  \item My missing sanity
+\end{itemize}
 
 %----------------------------------------------------------------------------------------
 %	REFERENCE LIST
 %----------------------------------------------------------------------------------------
 
-\begin{thebibliography}{99} % Bibliography - this is intentionally simple in this template
-
-\bibitem[Figueredo and Wolf, 2009]{Figueredo:2009dg}
-Figueredo, A.~J. and Wolf, P. S.~A. (2009).
-\newblock Assortative pairing and life history strategy - a cross-cultural
-  study.
-\newblock {\em Human Nature}, 20:317--330.
- 
-\end{thebibliography}
 
 %----------------------------------------------------------------------------------------
 
