@@ -222,34 +222,16 @@ Code-wise, our initial implementation for \texttt{getNeighbourCount} used modulo
   \caption{modulo getNeighbourCount function}
   \begin{algorithmic}
     \State Let $row \gets rowCoordinate \% ImageHeight$
-    \State Let $col \gets colCoordinate \% ImageWidth
-    \If{row || col < 0} 
-    
+    \State Let $col \gets colCoordinate \% ImageWidth$
+    \If{row < 0} 
+    \State $row \gets ImageHeight - 1$
+    \ElsIf{col < 0}
+    \State $row \gets ImageWidth - 1$ 
     \EndIf
-
-
-
-  %   \State Let $i, j \gets (row, column)$ on world
-  % \State Let $O \gets [\{-1,0,1\} \times \{-1, 0, 1\} - \{0,0\}]$
-  % \State Let $alive \gets 0$   
-  % \For{$(x,y) \in O$}
-  %     \State $row \gets (i + y)$
-  %     \If{row < 0}
-  %       \State $row \gets ImageHeight-1$
-  %     \ElsIf{row = ImageHeight}
-  %       \State $row \gets 0$
-  %     \EndIf
-  %     \State $col \gets (j + x)$
-  %     \If{col < 0}
-  %       \State $col \gets ImageWidth - 1$
-  %       \ElsIf{col = ImageWidth}
-  %         \State $col \gets 0$
-  %     \EndIf
-  %     \If{world[row][col] = 255}
-  %     \State $alive++$
-  %     \EndIf
-  %   \EndFor
-  %   \State \Return $alive$
+    \If{alive[row][col] = 0xFF}
+    \State $alive++$
+    \EndIf
+    \State \Return $alive$
   \end{algorithmic}
 \end{algorithm}
 
@@ -436,6 +418,7 @@ internal state, which is only pushed to if all workers return their flipped cell
 \end{figure}
 
 \section{Implementing Halo Exchange}
+Now that we have a broker and a Publish-Subscriber model, we can further optimise by having halo exchange.
 \subsection{How Jesus Christ came to be}
 Our first attempt wasn't exactly the definition of halo exchange. It used halos distributed by broker to
 each worker, who then used the halos to update their internal state. Now, our implementation transfers the turn iterator
