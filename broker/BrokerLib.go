@@ -10,23 +10,54 @@ import (
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
+type WorkerInfo struct {
+	client    *rpc.Client
+	workSize  int
+	rowOffset int
+	ipAddress string
+}
 type Broker struct {
-	Mu               *sync.Mutex
-	Workers          map[int]*rpc.Client //for HALO exchange: we need to know which workers are next to each other. Solution: make Workers a map[(int, int)]*rpc.Client.
-	Controller       *rpc.Client
-	NextID           int
-	Pause            sync.WaitGroup
-	isPaused         bool
-	Params           stubs.StubParams
-	CurrentWorld     [][]byte
-	workAllocation   map[int]int
-	workerRowOffsets map[int]int
-	workerIds        []int
+	Mu                *sync.Mutex
+	Workers           map[int]*WorkerInfo // Id : worker
+	Controller        *rpc.Client
+	NextID            int
+	Pause             sync.WaitGroup
+	isPaused          bool
+	Params            stubs.StubParams
+	CurrentWorld      [][]byte
+	lastCompletedTurn int                  //if new worker added, worker deleted ... any change
+	flippedCells      map[int][]util.Cell  //turn : flippedCells
+	workersResponded  map[int]map[int]bool //turn: (id : bool)
+	workerIds         []int
+	exit              bool
+	processCellsReq   chan bool
+	errorChan         chan int
+	processing        bool
 }
 
 // initialises Broker struct
 func NewBroker() *Broker {
-	return &Broker{NextID: 0, Mu: new(sync.Mutex), Controller: nil, Workers: map[int]*rpc.Client{}, workerIds: []int{}, workerRowOffsets: map[int]int{}}
+	return &Broker{errorChan: make(chan int), processCellsReq: make(chan bool), NextID: 0, Mu: new(sync.Mutex), Controller: nil, Workers: map[int]*WorkerInfo{}, workerIds: []int{}, workersResponded: make(map[int]map[int]bool), flippedCells: make(map[int][]util.Cell)}
+}
+
+func (b *Broker) resetBroker(id int) {
+	//resetting variables
+	b.Mu.Lock()
+	defer b.Mu.Unlock()
+	b.flippedCells = make(map[int][]util.Cell)
+	b.workersResponded = make(map[int]map[int]bool)
+	b.lastCompletedTurn = 0
+	// flush channels
+	for len(b.processCellsReq) != 0 {
+		<-b.processCellsReq
+	}
+	//remove bad worker
+	if id != -1 {
+		b.Workers[id].client.Go(stubs.Shutdown, new(stubs.NilRequest), new(stubs.NilResponse), nil)
+		delete(b.Workers, id)
+		b.workerIds = stubs.RemoveSliceElement(b.workerIds, id)
+	}
+
 }
 
 // removes all worker ids from b.Workers map
@@ -34,7 +65,7 @@ func (b *Broker) removeWorkersFromRegister(byWorker bool, ids ...int) {
 	b.Mu.Lock()
 	for _, id := range ids {
 		if byWorker {
-			b.Workers[id].Call(stubs.Shutdown, stubs.NilRequest{}, new(stubs.NilResponse))
+			b.Workers[id].client.Call(stubs.Shutdown, stubs.NilRequest{}, new(stubs.NilResponse))
 		}
 		delete(b.Workers, id)
 		b.workerIds = stubs.RemoveSliceElement(b.workerIds, id)
@@ -43,9 +74,13 @@ func (b *Broker) removeWorkersFromRegister(byWorker bool, ids ...int) {
 }
 
 // sets a new worker on b.Workers
-func (b *Broker) addWorker(client *rpc.Client) {
+func (b *Broker) addWorker(client *rpc.Client, ip string) {
 	b.Mu.Lock()
-	b.Workers[b.NextID] = client
+	newWorker := WorkerInfo{
+		client:    client,
+		ipAddress: ip,
+	}
+	b.Workers[b.NextID] = &newWorker
 	b.workerIds = append(b.workerIds, b.NextID)
 	b.NextID++
 	b.Mu.Unlock()
@@ -70,56 +105,91 @@ func (b *Broker) removeController() {
 }
 
 // distributes the allocation as evenly as possible, minimising (max - min)
-func divideEvenly(rowCount int, workerIds []int) map[int]int {
-	workerCount := len(workerIds)
-	workAllocationMap := make(map[int]int)
-	workSize := rowCount / workerCount
-	remainder := rowCount - workSize*workerCount
-	for _, id := range workerIds {
-		workAllocationMap[id] = workSize
+func divideEvenly(b *Broker) {
+	workerCount := len(b.workerIds)
+	workSize := b.Params.ImageHeight / workerCount
+	remainder := b.Params.ImageHeight - workSize*workerCount
+	for _, id := range b.workerIds {
+		b.Workers[id].workSize = workSize
 	}
-	for _, id := range workerIds {
+	for _, id := range b.workerIds {
 		if remainder <= 0 {
 			continue
 		}
-		workAllocationMap[id] += 1
+		b.Workers[id].workSize += 1
 		remainder--
 	}
-	return workAllocationMap
+}
+
+func (b *Broker) getHaloIPs(i int) (topWorkerIp, botWorkerIp string) {
+
+	//topworker is also the previous worker because we are going top to bottom during section allocation
+	topWorkerIndex := i - 1
+	if topWorkerIndex == -1 {
+		topWorkerIndex = len(b.workerIds) - 1
+	}
+	botWorkerIndex := i + 1
+	if botWorkerIndex == len(b.workerIds) {
+		botWorkerIndex = 0
+	}
+	topWorkerId := b.workerIds[topWorkerIndex]
+	botWorkerId := b.workerIds[botWorkerIndex]
+	topWorkerIp = b.Workers[topWorkerId].ipAddress
+	botWorkerIp = b.Workers[botWorkerId].ipAddress
+	fmt.Printf("topIp: %s, botIp %s\n", topWorkerIp, botWorkerIp)
+	return
+}
+
+func (b *Broker) getWorkersNotResponded() []int {
+	b.Mu.Lock()
+	defer b.Mu.Unlock()
+	out := b.workerIds
+	for workerId := range b.workersResponded {
+		out = stubs.RemoveSliceElement(b.workerIds, workerId)
+	}
+	return out
 }
 
 // prime workers should set the slice size that workers use for processing
 // IMPORTANT: must mutex lock in calling scope
-func (b *Broker) primeWorkers() {
+func (b *Broker) primeWorkers(firstTime bool) {
 	b.Mu.Lock()
 	defer b.Mu.Unlock()
-	workAllocationMap := divideEvenly(b.Params.ImageHeight, b.workerIds)
-	fmt.Println("finished dividing work. Allocation: ", workAllocationMap)
+	divideEvenly(b)
 	currRowOffset := 0
-	for id, worker := range b.Workers {
-		b.workerRowOffsets[id] = currRowOffset
-		workSize := workAllocationMap[id]
-		// fmt.Printf("worksize: %d, imageWidth: %d\n", workSize, b.Params.ImageWidth)
+	//this is assuming that the order of the map does not change within this function
+	for i, id := range b.workerIds {
+		b.Workers[id].rowOffset = currRowOffset
+		workSize := b.Workers[id].workSize
+
+		topWorkerIp, botWorkerIp := "", ""
+		if len(b.workerIds) > 1 {
+			topWorkerIp, botWorkerIp = b.getHaloIPs(i)
+		}
 		initRequest := stubs.InitWorkerRequest{
 			Height:      workSize,
 			Width:       b.Params.ImageWidth,
-			WorkerIndex: id,
 			RowOffset:   currRowOffset,
+			TopWorkerIP: topWorkerIp,
+			BotWorkerIP: botWorkerIp,
+			FirstTime:   firstTime,
 		}
-		worker.Call(stubs.InitialiseWorker, initRequest, new(stubs.NilResponse))
-		id++
+		worker := b.Workers[id].client
+		err := worker.Call(stubs.InitialiseWorker, initRequest, new(stubs.NilResponse))
+		if err != nil {
+			fmt.Printf("err: %s\n", err)
+		}
 		currRowOffset += workSize //keeping track of currentRowOffset
 	}
 	fmt.Println("Finished priming")
-	b.workAllocation = workAllocationMap
 }
 
 // sends shutdown request to all connected workers
 func (b *Broker) killWorkers() {
 	b.Mu.Lock()
 	for _, worker := range b.Workers {
-		worker.Call(stubs.Shutdown, stubs.NilRequest{}, new(stubs.NilResponse))
-		worker.Close()
+		worker.client.Call(stubs.Shutdown, stubs.NilRequest{}, new(stubs.NilResponse))
+		worker.client.Close()
 	}
 	b.Mu.Unlock()
 }
@@ -135,6 +205,7 @@ func (b *Broker) setParams(p stubs.StubParams) {
 func (b *Broker) initialiseWorld(initialAliveCells []util.Cell) {
 	b.Mu.Lock()
 	b.CurrentWorld = stubs.ConstructWorld(initialAliveCells, b.Params.ImageHeight, b.Params.ImageWidth)
+	b.lastCompletedTurn = 0
 	b.Mu.Unlock()
 }
 
@@ -156,100 +227,12 @@ func (b *Broker) isSameWorkers(ids []int) bool {
 	return true
 }
 
-// executes 1 iteration of single worker GOL
-func (b *Broker) singleWorkerGOL(hasReprimed bool) (flippedCells []util.Cell, success bool, faultyWorkerIds []int) {
-	var workReq stubs.WorkRequest
-	if hasReprimed {
-		// repriming will make the worker empty
-		workReq = stubs.WorkRequest{
-			FlippedCells: stubs.GetAliveCells(b.CurrentWorld),
-		}
-	} else {
-		// the worker will already have their own state
-		workReq = stubs.WorkRequest{FlippedCells: nil, TopHalo: nil, BottomHalo: nil}
-	}
-	workRes := new(stubs.WorkResponse)
-	err := b.Workers[b.workerIds[0]].Call(stubs.EvolveSlice, workReq, workRes)
-	success = err == nil
-	if !success {
-		faultyWorkerIds = append(faultyWorkerIds, b.workerIds[0])
-		return
-	}
-	flippedCells = workRes.FlippedCells
-	return
-}
-
 // gets the slice for a worker
 func (b *Broker) getSectionSlice(workerId int) [][]byte {
-	rowOffset := b.workerRowOffsets[workerId]
-	workSize := b.workAllocation[workerId]
+	rowOffset := b.Workers[workerId].rowOffset
+	workSize := b.Workers[workerId].workSize
 	fmt.Printf("worker: %d, startRow: %d, endRow: %d\n", workerId, rowOffset, rowOffset+workSize)
 	return b.CurrentWorld[rowOffset : rowOffset+workSize]
-}
-
-// executes 1 iteration of Multi-worker GOL
-func (b *Broker) multiWorkerGOL(hasReprimed bool) (flippedCells []util.Cell, success bool, faultyWorkerIds []int) {
-	// multiple workers => halos
-	var waitgroup sync.WaitGroup
-	success = true
-	flippedCells = []util.Cell{}
-	flippedCellChannel := make(chan util.Cell, 10000)
-	for id := range b.workerIds {
-		// assign halos to work request
-		workReq := stubs.WorkRequest{}
-		workReq.TopHalo, workReq.BottomHalo = b.getHalos(id)
-
-		if hasReprimed {
-			// reprimed workers will have blank states, so set state
-			workReq.FlippedCells = stubs.GetAliveCells( //alive cells == flipped cells because repriming
-				b.getSectionSlice(id),
-			)
-		} else {
-			workReq.FlippedCells = nil
-		}
-		// async send and receive to allow other slice requests
-		waitgroup.Add(1)
-		done := make(chan *rpc.Call, 1)
-		workRes := new(stubs.WorkResponse)
-		b.Workers[id].Go(stubs.EvolveSlice, workReq, workRes, done)
-		go func(id int) {
-			res := <-done
-			localSuccess := res.Error == nil
-			if !localSuccess {
-				faultyWorkerIds = append(faultyWorkerIds, id)
-			} else {
-				// we need to merge the flipped cells in different goroutines
-				// so send into serialising channel
-				for _, cell := range workRes.FlippedCells {
-					flippedCellChannel <- cell
-				}
-			}
-			// if one fails, then discard the whole batch
-			success = success && localSuccess
-			waitgroup.Done()
-		}(id)
-	}
-	// when all goroutines have finished, this will unblock the "for range chan"
-	go func() {
-		waitgroup.Wait()
-		close(flippedCellChannel)
-	}()
-	// this receives the cells from the goroutines
-	for cell := range flippedCellChannel {
-		flippedCells = append(flippedCells, cell)
-	}
-	return
-}
-
-// returns the top and bottom halos for a given worker
-func (b *Broker) getHalos(workerId int) (topHalo, bottomHalo []byte) {
-
-	topHaloIndex := (b.workerRowOffsets[workerId] - 1) & (b.Params.ImageHeight - 1)
-	botHaloIndex := (b.workerRowOffsets[workerId] + b.workAllocation[workerId]) & (b.Params.ImageHeight - 1)
-	fmt.Printf("tophaloindex: %d bothaloindex: %d\n", topHaloIndex, botHaloIndex)
-	topHalo = b.CurrentWorld[topHaloIndex]
-	bottomHalo = b.CurrentWorld[botHaloIndex]
-	return
 }
 
 // applies the flipped cell changes to the broker's current world
