@@ -154,7 +154,6 @@ func (b *Broker) getWorkersNotResponded() []int {
 // IMPORTANT: must mutex lock in calling scope
 func (b *Broker) primeWorkers(firstTime bool) {
 	b.Mu.Lock()
-	defer b.Mu.Unlock()
 	divideEvenly(b)
 	currRowOffset := 0
 	//this is assuming that the order of the map does not change within this function
@@ -175,12 +174,17 @@ func (b *Broker) primeWorkers(firstTime bool) {
 			FirstTime:   firstTime,
 		}
 		worker := b.Workers[id].client
+		println("before call")
+		b.Mu.Unlock()
 		err := worker.Call(stubs.InitialiseWorker, initRequest, new(stubs.NilResponse))
+		println("after call")
 		if err != nil {
 			fmt.Printf("err: %s\n", err)
 		}
 		currRowOffset += workSize //keeping track of currentRowOffset
+		b.Mu.Lock()
 	}
+	b.Mu.Unlock()
 	fmt.Println("Finished priming")
 }
 

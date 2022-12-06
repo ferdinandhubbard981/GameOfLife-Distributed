@@ -72,6 +72,7 @@ func (b *Broker) StartGOL(req stubs.StartGOLRequest, res *stubs.NilResponse) (er
 		// fmt.Printf("lastCompletedTurn: %d totalTurns: %d controllerNil?: %t\n", b.lastCompletedTurn, req.P.Turns, b.Controller == nil)
 		select {
 		case badWorkerId := <-b.errorChan: //if error: restart workers
+			fmt.Printf("R\n")
 			// reset all vars
 			//remove bad worker with id
 			b.resetBroker(badWorkerId)
@@ -80,6 +81,7 @@ func (b *Broker) StartGOL(req stubs.StartGOLRequest, res *stubs.NilResponse) (er
 			lastPushState = time.Now()
 
 		case <-b.processCellsReq:
+			fmt.Printf("A\n")
 			b.Mu.Lock()
 			if b.Controller == nil {
 				b.Mu.Unlock()
@@ -102,6 +104,8 @@ func (b *Broker) StartGOL(req stubs.StartGOLRequest, res *stubs.NilResponse) (er
 			lastPushState = time.Now()
 			b.Mu.Unlock()
 		default:
+			fmt.Printf("B\n")
+			time.Sleep(time.Millisecond * 100)
 			if time.Now().Second()-lastPushState.Second() > int(time.Second.Seconds()) {
 				if b.Controller == nil {
 					lastPushState = time.Now()
@@ -116,8 +120,10 @@ func (b *Broker) StartGOL(req stubs.StartGOLRequest, res *stubs.NilResponse) (er
 		}
 
 	}
-	b.resetBroker(-1)
+	fmt.Printf("E\n")
 	b.primeWorkers(false) //to stop the workers from carrying on executing turns when controller disconnects before all turns have been processed
+	fmt.Printf("F\n")
+	b.resetBroker(-1)
 	fmt.Println("brokerStartGol Done")
 	return
 }
@@ -150,11 +156,12 @@ func (b *Broker) PauseState(req stubs.NilRequest, res *stubs.PauseResponse) (err
 }
 
 func (b *Broker) PushState(req stubs.BrokerPushStateRequest, res *stubs.NilResponse) (err error) {
-	b.Mu.Lock()
-	defer b.Mu.Unlock()
+	fmt.Printf("PushState\n")
 	if b.exit || b.Controller == nil {
 		return
 	}
+	b.Mu.Lock()
+	defer b.Mu.Unlock()
 	_, exists := b.workersResponded[req.Turn]
 	if !exists {
 		b.workersResponded[req.Turn] = make(map[int]bool)

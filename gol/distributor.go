@@ -41,14 +41,14 @@ var controller Controller
 func (c *Controller) aliveCellsTicker(client *rpc.Client) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-
-	for {
+	exit := false
+	for !exit {
 		select {
 		case <-ticker.C:
 			aliveCellsCount, turn := c.acknowledgedCells.GetAliveCount()
 			c.eventsSender.SendAliveCellsList(turn, aliveCellsCount)
 		case <-c.exitChannels[aliveCellsTickerFunc]:
-			break
+			exit = true
 		}
 	}
 
@@ -112,13 +112,11 @@ func newController() Controller {
 }
 
 func (c *Controller) sendExitSignals() {
-	c.m.Lock()
-	go func() {
-		c.exitChannels[aliveCellsTickerFunc] <- true
-	}()
+	// go func() {
+	c.exitChannels[aliveCellsTickerFunc] <- true
+	// }()
 	c.exitChannels[receiver] <- true
 
-	c.m.Unlock()
 }
 
 // distributor distributes the work to the broker via rpc calls

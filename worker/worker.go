@@ -39,8 +39,6 @@ func (w *Worker) EvolveSlice(req stubs.WorkRequest, res *stubs.NilResponse) (err
 	topDone <- new(rpc.Call)
 	botDone := make(chan *rpc.Call, 1)
 	botDone <- new(rpc.Call)
-	// brokerDone := make(chan *rpc.Call, 1)
-	// wg := new(sync.WaitGroup)
 	w.repriming = false
 	w.inEvolveLoop = true
 	for i := req.StartTurn; (i <= req.Turns || req.Turns == -1) && !w.repriming; i++ { //if -1 that means forever
@@ -51,34 +49,49 @@ func (w *Worker) EvolveSlice(req stubs.WorkRequest, res *stubs.NilResponse) (err
 		}
 		var evolvedSlice [][]byte = createNewSlice(w.height, w.width) // TODO try move this outside of for loop and see if it still works
 		// wait for Halo input
-		var topHalo []byte
-		var botHalo []byte
+		var topHalo []byte = nil
+		var botHalo []byte = nil
+		fmt.Printf("A\n")
 		if req.IsSingleWorker { //if single worker
 			topHalo = w.container.CurrentWorld[w.height-1] //set to last row
 			botHalo = w.container.CurrentWorld[0]          //set to first row
 		} else { //if more than 1 worker
-			topHalo = <-w.topHalo
-			botHalo = <-w.botHalo
+			exit := false
+			for (topHalo == nil || botHalo == nil) && !exit {
+				select {
+				case topHalo = <-w.topHalo:
+
+				case botHalo = <-w.botHalo:
+				default:
+					if w.repriming {
+						fmt.Println("REPRIMING IS TRUE")
+						exit = true
+					}
+				}
+			}
+
 		}
+		if w.repriming {
+			continue
+		}
+		fmt.Printf("B\n")
 		// perform iteration
 		flipped := w.evolve(evolvedSlice, topHalo, botHalo)
+		fmt.Printf("C\n")
 		// updated world in worker api
 		w.container.UpdateWorld(evolvedSlice)
 
-		// TODO pushFLippedCells to broker
+		fmt.Printf("D\n")
+		// pushFLippedCells to broker
 		brokerReq := stubs.BrokerPushStateRequest{
 			FlippedCells: flipped,
 			Turn:         i,
 			WorkerId:     w.id,
 		}
 		w.broker.Call(stubs.BrokerPushState, brokerReq, new(stubs.NilResponse))
-		// wg.Add(1)
-		// go func() {
-		// 	<-brokerDone
-		// 	wg.Done()
-		// }()
+
+		fmt.Printf("E\n")
 	}
-	// wg.Wait() //wait until all flippedCells have been sent
 	w.inEvolveLoop = false
 	fmt.Println("EXITED EVOLVE FUNCTION")
 	return
