@@ -87,7 +87,7 @@
 \renewcommand{\maketitlehookd}{
 \begin{abstract}
   We intend to explain our two solutions for implementing Conway's Game of Life in Golang, namely the Parallel and Distributed versions.
-  Within this report, we will discuss the impacts of thread usage in both our implementations, as well as the effect of distributed computation as opposed to single-machine computation. In essence, we found that execution time was sped up as we increased thread count, reduced branch instructions and implemented a halo exchange mechanism.
+  Within this report, we will discuss the impacts of thread usage in the parallel implementation, as well as the effect of distributed computation as opposed to single-machine computation. In essence, we found that execution time was sped up as we increased thread count, reduced branch instructions and implemented a halo exchange mechanism.
 \end{abstract}
 }
 
@@ -217,6 +217,41 @@ Code-wise, our initial implementation for \texttt{getNeighbourCount} used modulo
   \item If row | col < 0, then add ImageHeight/Width respectively
   \item If world[row][col] was 255, increment alive count
 \end{enumerate}
+
+\begin{algorithm}
+  \caption{modulo getNeighbourCount function}
+  \begin{algorithmic}
+    \State Let $row \gets rowCoordinate \% ImageHeight$
+    \State Let $col \gets colCoordinate \% ImageWidth
+    \If{row || col < 0} 
+    
+    \EndIf
+
+
+
+  %   \State Let $i, j \gets (row, column)$ on world
+  % \State Let $O \gets [\{-1,0,1\} \times \{-1, 0, 1\} - \{0,0\}]$
+  % \State Let $alive \gets 0$   
+  % \For{$(x,y) \in O$}
+  %     \State $row \gets (i + y)$
+  %     \If{row < 0}
+  %       \State $row \gets ImageHeight-1$
+  %     \ElsIf{row = ImageHeight}
+  %       \State $row \gets 0$
+  %     \EndIf
+  %     \State $col \gets (j + x)$
+  %     \If{col < 0}
+  %       \State $col \gets ImageWidth - 1$
+  %       \ElsIf{col = ImageWidth}
+  %         \State $col \gets 0$
+  %     \EndIf
+  %     \If{world[row][col] = 255}
+  %     \State $alive++$
+  %     \EndIf
+  %   \EndFor
+  %   \State \Return $alive$
+  \end{algorithmic}
+\end{algorithm}
 
 With this, while it succeeds in its purpose, it does not
 succeed efficiently. Areas of improvement include removal of the modulo operator, which, here,
