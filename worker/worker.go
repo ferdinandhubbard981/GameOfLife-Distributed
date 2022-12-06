@@ -46,7 +46,7 @@ func (w *Worker) EvolveSlice(req stubs.WorkRequest, res *stubs.NilResponse) (err
 	for i := req.StartTurn; (i <= req.Turns || req.Turns == -1) && !w.repriming; i++ { //if -1 that means forever
 		// send Halo to adjacent workers
 		if !req.IsSingleWorker {
-			go w.pushHalos(topDone, botDone) //maybe check if they have been received before send next?
+			w.pushHalos(topDone, botDone) //maybe check if they have been received before send next?
 		}
 		var evolvedSlice [][]byte = createNewSlice(w.height, w.width) // TODO try move this outside of for loop and see if it still works
 		// wait for Halo input
