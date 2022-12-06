@@ -37,7 +37,6 @@ type Worker struct {
 func (w *Worker) EvolveSlice(req stubs.WorkRequest, res *stubs.NilResponse) (err error) {
 	// the worker has been reprimed, so its internal state is empty
 	w.container.UpdateWorldAndTurn(req.FlippedCells, 0)
-	// TODO: change so that worker keeps track of own turn
 	topDone := make(chan *rpc.Call, 1)
 	topDone <- new(rpc.Call)
 	botDone := make(chan *rpc.Call, 1)
@@ -45,18 +44,14 @@ func (w *Worker) EvolveSlice(req stubs.WorkRequest, res *stubs.NilResponse) (err
 	w.repriming = false
 	w.inEvolveLoop = true
 	for i := req.StartTurn; (i <= req.Turns || req.Turns == -1) && !w.repriming; i++ { //if -1 that means forever
-		fmt.Printf("processing turn: %d of turns %d\n", i, req.Turns)
 		// send Halo to adjacent workers
 		if !req.IsSingleWorker {
 			go w.pushHalos(topDone, botDone) //maybe check if they have been received before send next?
 		}
-		fmt.Printf("1\n")
 		var evolvedSlice [][]byte = createNewSlice(w.height, w.width) // TODO try move this outside of for loop and see if it still works
-		fmt.Printf("2\n")
 		// wait for Halo input
 		var topHalo []byte = nil
 		var botHalo []byte = nil
-		fmt.Printf("A\n")
 		if req.IsSingleWorker { //if single worker
 			topHalo = w.container.CurrentWorld[w.height-1] //set to last row
 			botHalo = w.container.CurrentWorld[0]          //set to first row
@@ -79,14 +74,11 @@ func (w *Worker) EvolveSlice(req stubs.WorkRequest, res *stubs.NilResponse) (err
 		if w.repriming {
 			continue
 		}
-		fmt.Printf("B\n")
 		// perform iteration
 		flipped := w.evolve(evolvedSlice, topHalo, botHalo)
-		fmt.Printf("C\n")
 		// updated world in worker api
 		w.container.UpdateWorld(evolvedSlice)
 
-		fmt.Printf("D\n")
 		// pushFLippedCells to broker
 		brokerReq := stubs.BrokerPushStateRequest{
 			FlippedCells: flipped,
@@ -96,10 +88,8 @@ func (w *Worker) EvolveSlice(req stubs.WorkRequest, res *stubs.NilResponse) (err
 		w.Pause.Wait()
 		w.broker.Call(stubs.BrokerPushState, brokerReq, new(stubs.NilResponse))
 
-		fmt.Printf("E\n")
 	}
 	w.inEvolveLoop = false
-	fmt.Println("EXITED EVOLVE FUNCTION")
 	return
 }
 
@@ -135,8 +125,6 @@ func (w *Worker) InitialiseWorker(req stubs.InitWorkerRequest, res *stubs.NilRes
 	if req.TopWorkerIP != "" {
 		w.topWorker = dialWorker(req.TopWorkerIP)
 		w.botWorker = dialWorker(req.BotWorkerIP)
-	} else {
-		fmt.Println("top worker ip: ", req.TopWorkerIP)
 	}
 	return
 }
@@ -161,23 +149,7 @@ func (w *Worker) Shutdown(req stubs.NilRequest, res *stubs.NilResponse) (err err
 }
 
 func (w *Worker) PushHalo(req stubs.PushHaloRequest, res *stubs.NilResponse) (err error) {
-	// loop := true
-	fmt.Println("x")
-	// for !w.repriming && loop {
-	// 	if req.IsTop {
-	// 		select {
-	// 		case w.topHalo <- req.Halo:
-	// 			loop = false
-	// 		default:
-	// 		}
-	// 	} else {
-	// 		select {
-	// 		case w.botHalo <- req.Halo:
-	// 			loop = false
-	// 		default:
-	// 		}
-	// 	}
-	// }
+
 	w.Pause.Wait()
 	if req.IsTop {
 		w.topHalo <- req.Halo

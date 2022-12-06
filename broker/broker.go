@@ -11,8 +11,6 @@ import (
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
-const doneBuffer = 10
-
 // initialises bidirectional comms with controller
 func (b *Broker) ControllerConnect(req stubs.ConnectRequest, res *stubs.NilResponse) (err error) {
 	fmt.Println("Received controller connect request")
@@ -64,12 +62,9 @@ func (b *Broker) StartGOL(req stubs.StartGOLRequest, res *stubs.NilResponse) (er
 	// start workers
 	b.startWorkers(req)
 	// check for errors
-	// fmt.Printf("lastCompletedTurn: %d totalTurns: %d controllerNil?: %t\n", b.lastCompletedTurn, req.P.Turns, b.Controller == nil)
 	lastPushState := time.Now()
-	// done := make(chan *rpc.Call, doneBuffer)
 	for b.lastCompletedTurn < req.P.Turns && b.Controller != nil {
 
-		// fmt.Printf("lastCompletedTurn: %d totalTurns: %d controllerNil?: %t\n", b.lastCompletedTurn, req.P.Turns, b.Controller == nil)
 		select {
 		case badWorkerId := <-b.errorChan: //if error: restart workers
 			fmt.Printf("R\n")
@@ -89,9 +84,7 @@ func (b *Broker) StartGOL(req stubs.StartGOLRequest, res *stubs.NilResponse) (er
 			}
 			b.lastCompletedTurn++
 			//send error if we don't get here within a second
-			// fmt.Printf("workers responded: %d, turn %d\n", workersRespondedCount, b.lastCompletedTurn)
 			//update controller
-			fmt.Printf("turn %d\n", b.lastCompletedTurn)
 			pushReq := stubs.PushStateRequest{
 				FlippedCells: b.flippedCells[b.lastCompletedTurn],
 				Turn:         b.lastCompletedTurn,
@@ -104,7 +97,6 @@ func (b *Broker) StartGOL(req stubs.StartGOLRequest, res *stubs.NilResponse) (er
 			lastPushState = time.Now()
 			b.Mu.Unlock()
 		default:
-			fmt.Printf("B\n")
 			time.Sleep(time.Millisecond * 100)
 			if time.Now().Second()-lastPushState.Second() > int(time.Second.Seconds()) {
 				if b.Controller == nil {
@@ -121,11 +113,8 @@ func (b *Broker) StartGOL(req stubs.StartGOLRequest, res *stubs.NilResponse) (er
 		}
 
 	}
-	fmt.Printf("E\n")
 	b.primeWorkers(false) //to stop the workers from carrying on executing turns when controller disconnects before all turns have been processed
-	fmt.Printf("F\n")
 	b.resetBroker(-1)
-	fmt.Println("brokerStartGol Done")
 	return
 }
 
