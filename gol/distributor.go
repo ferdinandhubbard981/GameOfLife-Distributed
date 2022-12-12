@@ -162,7 +162,7 @@ func distributor(p Params, d distributorChannels, kp <-chan rune) {
 	go controller.aliveCellsTicker(client)
 
 	// connect to the broker
-	listenSocket := p.ListenIP + ":" + strconv.Itoa(p.ListenPort)
+	listenSocket := p.ListenIP
 	connReq := stubs.ConnectRequest{IP: listenSocket}
 	connErr := client.Call(stubs.ControllerConnect, connReq, new(stubs.NilResponse))
 	if connErr != nil {

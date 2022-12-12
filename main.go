@@ -17,8 +17,8 @@ func main() {
 	flag.StringVar(
 		&params.ListenIP,
 		"listen",
-		"127.0.0.1",
-		"Specify the IP address of the distributor (this machine). Defaults to 127.0.0.1.")
+		"127.0.0.1:8090",
+		"Specify the IP address of the distributor (this machine). Defaults to 127.0.0.1:8090.")
 
 	flag.IntVar(
 		&params.ListenPort,
