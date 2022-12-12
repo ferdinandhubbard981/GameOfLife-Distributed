@@ -15,4 +15,5 @@ python3 plot.py
 ![](benchmark/256x256.jpg)
 ![](benchmark/512x512.jpg)
 
-scp -P 17418 ferdi@2.tcp.eu.ngrok.io:~/distdownload.zip .
+scp -P 17282 ferdi@6.tcp.eu.ngrok.io:~/distdownload.zip .
+go run . -port 9010 -thisIp  -brokerIP :9000

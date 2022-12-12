@@ -16,11 +16,13 @@ func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 
 	// for testing purposes
 	if p.BrokerAddr == "" { //this is because the tests don't assign these variables, and we can't change the test files.
-		p.BrokerAddr = "127.0.0.1:9000"
+		// p.BrokerAddr = "127.0.0.1:9000"
+		p.BrokerAddr = "54.226.171.228:9000"
 	}
 
 	if p.ListenIP == "" {
-		p.ListenIP = "127.0.0.1"
+		// p.ListenIP = "127.0.0.1:8090"
+		p.ListenIP = "6.tcp.eu.ngrok.io:13122"
 	}
 	if p.ListenPort == 0 {
 		p.ListenPort = 8090
