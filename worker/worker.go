@@ -147,6 +147,7 @@ func (w *Worker) PushHalo(req stubs.PushHaloRequest, res *stubs.NilResponse) (er
 func main() {
 	bAddr := flag.String("brokerIP", "127.0.0.1:9000", "IP address of broker")
 	pAddr := flag.String("port", "9010", "Port to listen on")
+	wAddr := flag.String("thisIp", "127.0.0.1", "ip of this machine")
 	flag.Parse()
 
 	// initalize Worker
@@ -170,7 +171,7 @@ func main() {
 	worker.broker = broker
 	res := new(stubs.ConnectResponse)
 	req := stubs.ConnectRequest{
-		IP: "127.0.0.1:" + *pAddr,
+		IP: *wAddr + ":" + *pAddr,
 	}
 	broker.Call(stubs.WorkerConnect, req, res)
 	worker.id = res.Id
