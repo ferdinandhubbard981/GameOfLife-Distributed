@@ -63,9 +63,6 @@ func (c *Controller) kpListener(kp <-chan rune, client *rpc.Client) {
 			c.eventsSender.SendOutputPGM(world, turn)
 		case 'q':
 			//close the local controller
-			// _, turn := c.acknowledgedCells.Get()
-			// client.Call(stubs.ControllerQuit, stubs.NilRequest{}, new(stubs.NilResponse))
-			// c.eventsSender.SendStateChange(turn, Quitting)
 			// make sure every goroutine dependent on exit is shutdown
 			c.exitChannels[distributorFunc] <- true
 
@@ -99,6 +96,7 @@ func (c *Controller) kpListener(kp <-chan rune, client *rpc.Client) {
 	}
 }
 
+//initialises Controller struct
 func newController() Controller {
 	exitChannels := make(map[int]chan bool)
 	for i := 0; i < enumSize; i++ {
@@ -111,6 +109,7 @@ func newController() Controller {
 	}
 }
 
+// sends exit signals along channels in enum, so all processes exit cleanly
 func (c *Controller) sendExitSignals() {
 	c.m.Lock()
 	go func() {
@@ -192,61 +191,45 @@ func distributor(p Params, d distributorChannels, kp <-chan rune) {
 
 	}
 	// exit the broker
-	fmt.Println("0")
 	client.Call(stubs.ControllerQuit, stubs.NilRequest{}, new(stubs.NilResponse))
-	fmt.Println("1")
 	client.Close()
 
-	fmt.Println("2")
 	close(done)
 
-	fmt.Println("3")
 	controller.sendExitSignals()
-	fmt.Println("4")
 	controller.shutDownSequence()
-	fmt.Printf("after\n")
 }
 
 func (c *Controller) shutDownSequence() {
 	// Get the final state of the world
-	fmt.Println("5")
 	world, turn := controller.acknowledgedCells.Get()
 
 	// Output the final image
-	fmt.Println("6")
 	controller.eventsSender.SendOutputPGM(world, turn)
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
-	fmt.Println("7")
 	controller.eventsSender.SendFinalTurn(turn, stubs.GetAliveCells(world)) //turn+1? DEBUG
 	// Make sure that the Io has finished any output before exiting.
-	fmt.Println("8")
 	c.eventsSender.C.ioCommand <- ioCheckIdle
-	fmt.Println("9")
 	<-c.eventsSender.C.ioIdle
 	// fmt.Printf("before\n")
 	c.eventsSender.C.events <- StateChange{turn, Quitting}
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-	fmt.Println("10")
 	close(c.eventsSender.C.events)
-	fmt.Println("11")
 }
 
-// This method will be called if the Broker has a calculated new state
-// for the user to view in SDL window
+// receives CellsFlipped and turn from Broker.
 func (c *Controller) PushState(req stubs.PushStateRequest, res *stubs.NilResponse) (err error) {
 	c.m.Lock()
 	fmt.Printf("turn: %d\n", req.Turn)
-	// util.VisualiseSquare(c.acknowledgedCells.CurrentWorld, len(c.acknowledgedCells.CurrentWorld), len(c.acknowledgedCells.CurrentWorld))
 	c.acknowledgedCells.UpdateWorldAndTurn(req.FlippedCells, req.Turn)
-	// util.VisualiseSquare(c.acknowledgedCells.CurrentWorld, len(c.acknowledgedCells.CurrentWorld), len(c.acknowledgedCells.CurrentWorld))
-	// c.eventsSender.SendOutputPGM(c.acknowledgedCells.CurrentWorld, req.Turn) //DEBUG
 	c.eventsSender.SendFlippedCellList(req.Turn, req.FlippedCells...)
 	c.eventsSender.SendTurnComplete(req.Turn)
 	c.m.Unlock()
 	return
 }
 
+// starts receiver
 func (c *Controller) receiver(listening chan<- bool, p Params) {
 	fmt.Println("starting controller listening")
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(p.ListenPort))

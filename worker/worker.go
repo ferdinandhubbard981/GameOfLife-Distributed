@@ -31,6 +31,8 @@ type Worker struct {
 	inEvolveLoop bool
 }
 
+// runs execution loop until last turn
+// each loop: getHalos, process turn, send halos, send turn back to broker
 func (w *Worker) EvolveSlice(req stubs.WorkRequest, res *stubs.NilResponse) (err error) {
 	// the worker has been reprimed, so its internal state is empty
 	w.container.UpdateWorldAndTurn(req.FlippedCells, 0)
@@ -94,6 +96,8 @@ func dialWorker(ip string) *rpc.Client {
 	return client
 }
 
+// sets all the initial variables
+
 func (w *Worker) InitialiseWorker(req stubs.InitWorkerRequest, res *stubs.NilResponse) (err error) {
 	w.repriming = true
 	for w.inEvolveLoop {
@@ -130,6 +134,7 @@ func (w *Worker) Shutdown(req stubs.NilRequest, res *stubs.NilResponse) (err err
 	return
 }
 
+// receives halos from adjacent workers and sends them to respective channels
 func (w *Worker) PushHalo(req stubs.PushHaloRequest, res *stubs.NilResponse) (err error) {
 	if req.IsTop {
 		w.topHalo <- req.Halo

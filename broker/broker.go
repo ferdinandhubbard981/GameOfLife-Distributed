@@ -11,8 +11,6 @@ import (
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
-const doneBuffer = 10
-
 // initialises bidirectional comms with controller
 func (b *Broker) ControllerConnect(req stubs.ConnectRequest, res *stubs.NilResponse) (err error) {
 	fmt.Println("Received controller connect request")
@@ -30,6 +28,7 @@ func (b *Broker) ControllerConnect(req stubs.ConnectRequest, res *stubs.NilRespo
 	return
 }
 
+//initialises workers and sends job to workers
 func (b *Broker) startWorkers(req stubs.StartGOLRequest) {
 
 	// if controller connects before any workers, block
@@ -64,12 +63,9 @@ func (b *Broker) StartGOL(req stubs.StartGOLRequest, res *stubs.NilResponse) (er
 	// start workers
 	b.startWorkers(req)
 	// check for errors
-	// fmt.Printf("lastCompletedTurn: %d totalTurns: %d controllerNil?: %t\n", b.lastCompletedTurn, req.P.Turns, b.Controller == nil)
 	lastPushState := time.Now()
-	// done := make(chan *rpc.Call, doneBuffer)
 	for b.lastCompletedTurn < req.P.Turns && b.Controller != nil {
 
-		// fmt.Printf("lastCompletedTurn: %d totalTurns: %d controllerNil?: %t\n", b.lastCompletedTurn, req.P.Turns, b.Controller == nil)
 		select {
 		case badWorkerId := <-b.errorChan: //if error: restart workers
 			// reset all vars
@@ -79,15 +75,13 @@ func (b *Broker) StartGOL(req stubs.StartGOLRequest, res *stubs.NilResponse) (er
 			b.startWorkers(req)
 			lastPushState = time.Now()
 
-		case <-b.processCellsReq:
+		case <-b.processCellsReq: //send newCells to distributor
 			b.Mu.Lock()
 			if b.Controller == nil {
 				b.Mu.Unlock()
 				continue
 			}
 			b.lastCompletedTurn++
-			//send error if we don't get here within a second
-			// fmt.Printf("workers responded: %d, turn %d\n", workersRespondedCount, b.lastCompletedTurn)
 			//update controller
 			fmt.Printf("turn %d\n", b.lastCompletedTurn)
 			pushReq := stubs.PushStateRequest{
@@ -149,6 +143,7 @@ func (b *Broker) PauseState(req stubs.NilRequest, res *stubs.PauseResponse) (err
 	return
 }
 
+// asynchronously receive cells from workers
 func (b *Broker) PushState(req stubs.BrokerPushStateRequest, res *stubs.NilResponse) (err error) {
 	b.Mu.Lock()
 	defer b.Mu.Unlock()
@@ -191,6 +186,7 @@ func (b *Broker) WorkerConnect(req stubs.ConnectRequest, res *stubs.ConnectRespo
 	return
 }
 
+//remove worker
 func (b *Broker) WorkerDisconnect(req stubs.RemoveRequest, res *stubs.NilResponse) (err error) {
 	b.removeWorkersFromRegister(true, req.Id)
 	fmt.Println("removed worker #", req.Id)
@@ -200,9 +196,10 @@ func (b *Broker) WorkerDisconnect(req stubs.RemoveRequest, res *stubs.NilRespons
 func main() {
 	pAddr := flag.String("port", "9000", "Port to listen on")
 	flag.Parse()
+	// initialise broker
 	b := NewBroker()
 	rpc.Register(b)
-
+	// setup listener
 	listener, err := net.Listen("tcp", ":"+*pAddr)
 	if err != nil {
 		fmt.Println("could not listen on port " + *pAddr)
@@ -210,6 +207,7 @@ func main() {
 	defer listener.Close()
 	go rpc.Accept(listener)
 	b.exit = false
+	// wait for exit
 	for !b.exit {
 		time.Sleep(time.Second)
 	}
