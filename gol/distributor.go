@@ -175,7 +175,7 @@ func distributor(p Params, d distributorChannels, kp <-chan rune) {
 	// start keypress listener
 	go controller.kpListener(kp, client)
 
-	// execute rpc
+	// send job to worker and execute
 	stubParams := stubs.StubParams{Turns: p.Turns, Threads: p.Threads, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight}
 	request := stubs.StartGOLRequest{InitialAliveCells: cells, P: stubParams}
 	done := make(chan *rpc.Call, 1)

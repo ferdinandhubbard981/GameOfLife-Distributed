@@ -1,0 +1,22 @@
+worker
+EvolveSlice:
+
+initialise variables
+loop for turns:
+    pushHalos
+    wait for halos
+    process turn
+    push new World to broker
+
+delete/ reset variables for clean exit
+
+broker 
+StartGol
+
+startWorkers()
+for x in range(turn):
+    if all workers responded for turn x:
+        send new world to controller
+    if error:
+        reset workers
+
